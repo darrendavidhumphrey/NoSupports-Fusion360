@@ -1,0 +1,10 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"script",
+	"author":	"",
+	"description":	{
+		"":	"Creates a grid of self-supporting objects"
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
