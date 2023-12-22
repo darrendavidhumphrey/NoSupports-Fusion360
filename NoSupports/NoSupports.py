@@ -258,20 +258,26 @@ def drawBox(sketch,x,y,w,h):
     lines = sketch.sketchCurves.sketchLines
     x2 = x+w
     y2 = y+h
-    recLines = lines.addTwoPointRectangle(adsk.core.Point3D.create(x,y,0.0),adsk.core.Point3D.create(x2,y2,0.0))
+
+    blc = adsk.core.Point3D.create(x,y,0.0)
+    trc = adsk.core.Point3D.create(x2,y2,0.0)
+    recLines = lines.addTwoPointRectangle(blc,trc)
 
     sketch.geometricConstraints.addHorizontal(recLines.item(0))
     sketch.geometricConstraints.addHorizontal(recLines.item(2))
     sketch.geometricConstraints.addVertical(recLines.item(1))
     sketch.geometricConstraints.addVertical(recLines.item(3))
 
+    dim1 = adsk.core.Point3D.create(x2, y, 0)
+    
     sketch.sketchDimensions.addDistanceDimension(recLines.item(0).startSketchPoint, recLines.item(0).endSketchPoint,
                                                  adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
-                                                 adsk.core.Point3D.create(x2, y, 0))
+                                                 dim1)
 
+    dim2 = adsk.core.Point3D.create(x, y2, 0)
     sketch.sketchDimensions.addDistanceDimension(recLines.item(1).startSketchPoint, recLines.item(1).endSketchPoint,
                                                  adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
-                                                 adsk.core.Point3D.create(x, y2, 0))
+                                                 dim2)
 
 def lineMidpoint(line):
     start = line.startSketchPoint.geometry
@@ -293,35 +299,164 @@ def drawMidpointConstraint(sketch,outerLine, innerLine,isVertical):
     sketch.geometricConstraints.addMidPoint(newline.startSketchPoint,outerLine)
     sketch.geometricConstraints.addMidPoint(newline.endSketchPoint,innerLine)
 
+def drawHex(sketch, hexWidth,startX,startY):
+    
+    apexHeight = hexWidth/2.0
+
+    # overall height of hex is hexWidth*2
+    # 1/2 hexWidth for bottom triangle
+    # 1/2 hexWidth for top triangle
+    # 1 hexWidth for middle square
+    
+    halfHex = hexWidth/2.0
+    #  y coords
+    y0 = startY
+    y1 = y0 + halfHex
+    y2 = y1 + hexWidth
+    y3 = y2 + halfHex
+    
+    # compute x coords
+    x0 = startX
+    x1 = x0 + halfHex
+    x2 = x1 + halfHex
+
+    # compute points: start at bottom apex, work clockwise around perimeter
+    p0 = adsk.core.Point3D.create(x1,y0,0.0)
+    p1 = adsk.core.Point3D.create(x0,y1,0.0)
+    p2 = adsk.core.Point3D.create(x0,y2,0.0)
+    p3 = adsk.core.Point3D.create(x1,y3,0.0)
+    p4 = adsk.core.Point3D.create(x2,y2,0.0)
+    p5 = adsk.core.Point3D.create(x2,y1,0.0)
+
+    # add lines, going clockwise around perimeter
+    # bottom apex to first vertical
+    l0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p1)
+
+    # first vertical
+    l1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p1,p2)
+    sketch.geometricConstraints.addVertical(l1)
+
+    # first vert to top apex
+    l2 = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p3)
+
+    # top apex to second vert
+    l3 = sketch.sketchCurves.sketchLines.addByTwoPoints(p3,p4)
+
+    # second vertical
+    l4 = sketch.sketchCurves.sketchLines.addByTwoPoints(p4,p5)
+    sketch.geometricConstraints.addVertical(l4)
+
+    # second vert to bottom apex
+    l5 = sketch.sketchCurves.sketchLines.addByTwoPoints(p5,p0)
+
+    # force all points to be connected
+    sketch.geometricConstraints.addCoincident(l0.endSketchPoint,l1.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l1.endSketchPoint,l2.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l2.endSketchPoint,l3.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l3.endSketchPoint,l4.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l4.endSketchPoint,l5.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l5.endSketchPoint,l0.startSketchPoint)
+
+    # force apexes to be square
+    sketch.geometricConstraints.addPerpendicular(l0,l5)
+    sketch.geometricConstraints.addPerpendicular(l2,l3)
+
+    # Add construction line across top of box
+    c0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p4)
+    c0.isConstruction = True
+    sketch.geometricConstraints.addHorizontal(c0)
+    sketch.geometricConstraints.addCoincident(c0.startSketchPoint,l2.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(c0.endSketchPoint,l3.endSketchPoint)
+
+    # Add construction line from apex to c0 mid
+    c0Mid = lineMidpoint(c0)
+    c0MidLine = sketch.sketchCurves.sketchLines.addByTwoPoints(c0Mid,p3)
+    c0MidLine.isConstruction = True
+    sketch.geometricConstraints.addCoincident(c0MidLine.endSketchPoint,l2.endSketchPoint)
+    sketch.geometricConstraints.addMidPoint(c0MidLine.startSketchPoint,c0)
+    sketch.geometricConstraints.addVertical(c0MidLine)
+
+    # Add construction line across top of box
+    c1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p1,p5)
+    c1.isConstruction = True
+    sketch.geometricConstraints.addHorizontal(c1)
+    sketch.geometricConstraints.addCoincident(c1.startSketchPoint,l1.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(c1.endSketchPoint,l4.endSketchPoint)
+
+    # Add construction line from bottom apex to c1 mid
+    c1Mid = lineMidpoint(c1)
+    c1MidLine = sketch.sketchCurves.sketchLines.addByTwoPoints(c1Mid,p0)
+    c1MidLine.isConstruction = True
+    sketch.geometricConstraints.addCoincident(c1MidLine.endSketchPoint,l5.endSketchPoint)
+    sketch.geometricConstraints.addMidPoint(c1MidLine.startSketchPoint,c1)
+    sketch.geometricConstraints.addVertical(c1MidLine)
+
+    # constrain box height by constraining first vertical
+    sketch.sketchDimensions.addDistanceDimension(l1.startSketchPoint, l1.endSketchPoint,
+                                                 adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
+                                                 adsk.core.Point3D.create(0, hexWidth, 0))
+    # constrain box width by constraining c0
+    sketch.sketchDimensions.addDistanceDimension(c0.startSketchPoint, c0.endSketchPoint,
+                                                 adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
+                                                 adsk.core.Point3D.create(hexWidth, 0, 0))
+
+
+def drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin):
+    drawBox(sketch,outerX1,outerY1,outerX2,outerY2)
+    innerX1 = outerX1 + margin
+    innerY1 = outerY1 + margin
+    innerX2 = outerX2 - margin*2.0
+    innerY2 = outerY2 - margin*2.0
+    drawBox(sketch,innerX1,innerY1,innerX2,innerY2)
+        
+    outerRectBottom = sketch.sketchCurves.sketchLines.item(0)
+    innerRectBottom = sketch.sketchCurves.sketchLines.item(4)
+    drawMidpointConstraint(sketch,outerRectBottom,innerRectBottom,True)
+
+    outerRectLeft = sketch.sketchCurves.sketchLines.item(3)
+    innerRectLeft = sketch.sketchCurves.sketchLines.item(7)
+    drawMidpointConstraint(sketch,outerRectLeft,innerRectLeft,False)
+
 def drawMesh(design, width, height, hexWidth, hexSpacing, margin):
     try:
         # Create a new sketch.
         thisComp = design.rootComponent
-
         sketches = thisComp.sketches
-        xyPlane = thisComp.xYConstructionPlane
-        sketch = sketches.add(xyPlane)
 
-        # Draw a circle for the base.
-        outerX1 = 0.0
-        outerY1 = 0.0
-        outerX2 = width
-        outerY2 = height
-        drawBox(sketch,outerX1,outerY1,outerX2,outerY2)
+        masterSketch = sketches.item(0)
+        # Get the profile
+        prof = masterSketch.profiles.item(0)
 
-        innerX1 = outerX1 + margin
-        innerY1 = outerX1 + margin
-        innerX2 = outerX2 - margin*2.0
-        innerY2 = outerY2 - margin*2.0
-        drawBox(sketch,innerX1,innerY1,innerX2,innerY2)
+        # Get construction planes
+        #planes = thisComp.constructionPlanes
         
-        outerRectBottom = sketch.sketchCurves.sketchLines.item(0)
-        innerRectBottom = sketch.sketchCurves.sketchLines.item(4)
-        drawMidpointConstraint(sketch,outerRectBottom,innerRectBottom,True)
+        # Create construction plane input
+        #planeInput = planes.createInput()
+        
+        # Add construction plane by offset
+        #offsetValue = adsk.core.ValueInput.createByReal(1)
+        #planeInput.setByOffset(prof, offsetValue)
+        #planeOne = planes.add(planeInput)
 
-        outerRectLeft = sketch.sketchCurves.sketchLines.item(3)
-        innerRectLeft = sketch.sketchCurves.sketchLines.item(7)
-        drawMidpointConstraint(sketch,outerRectLeft,innerRectLeft,False)
+        bbox = prof.boundingBox
+        blc = prof.boundingBox.minPoint
+        trc = prof.boundingBox.maxPoint
+
+        sketch = sketches.add(thisComp.xYConstructionPlane)
+
+        # Get the size from the UI
+        #outerX1 = 0.0
+        #outerY1 = 0.0
+        #outerX2 = width
+        #outerY2 = height
+
+        # Get the size from the componenet
+        outerX1 = blc.x
+        outerY1 = blc.y
+        outerX2 = trc.x
+        outerY2 = trc.y
+        drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin)
+        drawHex(sketch,hexWidth,margin+1.0,margin+1.0)
 
         sketch.name = 'NoSupports Test'
         return sketch
