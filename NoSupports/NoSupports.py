@@ -254,6 +254,103 @@ class MeshCommandValidateInputsHandler(adsk.core.ValidateInputsEventHandler):
             if _ui:
                 _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
+import traceback
+import adsk.core as core
+import adsk.fusion as fusion
+
+
+def create_clone_sketch_and_geom(
+        sktEntity: fusion.SketchEntity
+) -> fusion.Sketch:
+
+    skt: fusion.Sketch = None
+    if sktEntity.classType() == fusion.Sketch.classType():
+        skt = sktEntity
+    else:
+        skt = sktEntity.parentSketch
+
+    comp: fusion.Component = skt.parentComponent
+    refPlane = skt.referencePlane
+
+    # get sketch entities
+    sktEnts: core.ObjectCollection = core.ObjectCollection.createWithArray(
+        list(skt.sketchCurves),
+    )
+    [sktEnts.add(pnt) for pnt in skt.sketchPoints]
+
+    # create offset plane
+    planes: fusion.ConstructionPlanes = comp.constructionPlanes
+    planeIpt: fusion.ConstructionPlaneInput = planes.createInput()
+    planeIpt.setByOffset(
+        refPlane,
+        core.ValueInput.createByReal(0),
+    )
+    offsetPlane: fusion.ConstructionPlane = planes.add(planeIpt)
+
+    # create sketch
+    cloneSkt: fusion.Sketch = comp.sketches.add(offsetPlane)
+
+    # copy
+    cloneSkt.copy(
+        sktEnts,
+        core.Matrix3D.create(),
+    )
+
+    return cloneSkt
+
+def create_clone_sketch(
+        sktEntity: fusion.SketchEntity
+) -> fusion.Sketch:
+
+    skt: fusion.Sketch = None
+    if sktEntity.classType() == fusion.Sketch.classType():
+        skt = sktEntity
+    else:
+        skt = sktEntity.parentSketch
+
+    comp: fusion.Component = skt.parentComponent
+    refPlane = skt.referencePlane
+
+    # get sketch entities
+    sktEnts: core.ObjectCollection = core.ObjectCollection.createWithArray(
+        list(skt.sketchCurves),
+    )
+    #[sktEnts.add(pnt) for pnt in skt.sketchPoints]
+
+    # create offset plane
+    planes: fusion.ConstructionPlanes = comp.constructionPlanes
+    planeIpt: fusion.ConstructionPlaneInput = planes.createInput()
+    planeIpt.setByOffset(
+        refPlane,
+        core.ValueInput.createByReal(0),
+    )
+    offsetPlane: fusion.ConstructionPlane = planes.add(planeIpt)
+
+    # create sketch
+    cloneSkt: fusion.Sketch = comp.sketches.add(offsetPlane)
+
+    # copy
+    #cloneSkt.copy(
+    #    sktEnts,
+    #    core.Matrix3D.create(),
+    #)
+
+    return cloneSkt
+
+
+def select_ent(
+        msg: str,
+        filterStr: str
+) -> core.Selection:
+
+    try:
+        app: core.Application = core.Application.get()
+        ui: core.UserInterface = app.userInterface
+        sel = ui.selectEntity(msg, filterStr)
+        return sel
+    except:
+        return None
+
 def drawBox(sketch,x,y,w,h):
     lines = sketch.sketchCurves.sketchLines
     x2 = x+w
@@ -402,6 +499,8 @@ def drawHex(sketch, hexWidth,startX,startY):
 
 
 def drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin):
+    
+    startItem = sketch.sketchCurves.sketchLines.count
     drawBox(sketch,outerX1,outerY1,outerX2,outerY2)
     innerX1 = outerX1 + margin
     innerY1 = outerY1 + margin
@@ -409,12 +508,12 @@ def drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin):
     innerY2 = outerY2 - margin*2.0
     drawBox(sketch,innerX1,innerY1,innerX2,innerY2)
         
-    outerRectBottom = sketch.sketchCurves.sketchLines.item(0)
-    innerRectBottom = sketch.sketchCurves.sketchLines.item(4)
+    outerRectBottom = sketch.sketchCurves.sketchLines.item(startItem)
+    innerRectBottom = sketch.sketchCurves.sketchLines.item(startItem+4)
     drawMidpointConstraint(sketch,outerRectBottom,innerRectBottom,True)
 
-    outerRectLeft = sketch.sketchCurves.sketchLines.item(3)
-    innerRectLeft = sketch.sketchCurves.sketchLines.item(7)
+    outerRectLeft = sketch.sketchCurves.sketchLines.item(startItem+3)
+    innerRectLeft = sketch.sketchCurves.sketchLines.item(startItem+7)
     drawMidpointConstraint(sketch,outerRectLeft,innerRectLeft,False)
 
 def drawMesh(design, width, height, hexWidth, hexSpacing, margin):
@@ -423,40 +522,49 @@ def drawMesh(design, width, height, hexWidth, hexSpacing, margin):
         thisComp = design.rootComponent
         sketches = thisComp.sketches
 
-        masterSketch = sketches.item(0)
-        # Get the profile
-        prof = masterSketch.profiles.item(0)
 
-        # Get construction planes
-        #planes = thisComp.constructionPlanes
+        skt: fusion.Sketch = None
+        skt = sketches.item(0)
+        if skt.classType() == fusion.Sketch.classType():
+            masterSketch = skt
+        else:
+            masterSketch = skt.parentSketch
+
+        try:
+            sketch = create_clone_sketch(masterSketch)
+        except Exception as error:
+            sketch.name = "Error"
+
+        bbox = masterSketch.boundingBox
+        blc = bbox.minPoint
+        trc = bbox.maxPoint
         
-        # Create construction plane input
-        #planeInput = planes.createInput()
-        
-        # Add construction plane by offset
-        #offsetValue = adsk.core.ValueInput.createByReal(1)
-        #planeInput.setByOffset(prof, offsetValue)
-        #planeOne = planes.add(planeInput)
-
-        bbox = prof.boundingBox
-        blc = prof.boundingBox.minPoint
-        trc = prof.boundingBox.maxPoint
-
-        sketch = sketches.add(thisComp.xYConstructionPlane)
 
         # Get the size from the UI
-        #outerX1 = 0.0
-        #outerY1 = 0.0
-        #outerX2 = width
-        #outerY2 = height
+        outerX1 = 0.0
+        outerY1 = 0.0
+        outerX2 = width
+        outerY2 = height
 
         # Get the size from the componenet
-        outerX1 = blc.x
-        outerY1 = blc.y
-        outerX2 = trc.x
-        outerY2 = trc.y
+        #outerX1 = blc.x
+        #outerY1 = blc.y
+        #outerX2 = trc.x
+        #outerY2 = trc.y
+
+        # Get the size from the componenet v2
+        #outerX1 = 0
+        #outerY1 = 0
+        #outerX2 = trc.x-blc.x
+        #outerY2 = trc.y-blc.y
+
+
         drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin)
-        drawHex(sketch,hexWidth,margin+1.0,margin+1.0)
+
+        #numRows = computeRows(blc,trc,hexWidth)
+        # numCols = computeCols(blc,trc,hexWidth)
+
+        # drawHex(sketch,hexWidth,margin+1.0,margin+1.0)
 
         sketch.name = 'NoSupports Test'
         return sketch
