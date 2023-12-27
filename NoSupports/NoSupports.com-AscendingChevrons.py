@@ -5,23 +5,33 @@ import math
 _app = adsk.core.Application.cast(None)
 _ui = adsk.core.UserInterface.cast(None)
 _units = ''
-_uiName = 'NoSupports'
+_uiName = 'NoSupports.com Ascending Chevron'
+
+class UiLogger:
+    def __init__(self, forceUpdate):  
+        app = adsk.core.Application.get()
+        ui  = app.userInterface
+        palettes = ui.palettes
+        self.textPalette = palettes.itemById("TextCommands")
+        self.forceUpdate = forceUpdate
+        self.textPalette.isVisible = True 
+    
+    def print(self, text):       
+        self.textPalette.writeText(text)
+        if (self.forceUpdate):
+            adsk.doEvents() 
 
 # Command inputs
 
-
-_margin = adsk.core.ValueCommandInput.cast(None)
-_width = adsk.core.ValueCommandInput.cast(None)
-_height = adsk.core.ValueCommandInput.cast(None)
-_hexWidth = adsk.core.ValueCommandInput.cast(None)
-_hexSpacing  = adsk.core.ValueCommandInput.cast(None)
+_sketchName = adsk.core.ValueCommandInput.cast(None)
+_marginParam = adsk.core.ValueCommandInput.cast(None)
+_widthParam = adsk.core.ValueCommandInput.cast(None)
+_heightParam = adsk.core.ValueCommandInput.cast(None)
+_numCols = adsk.core.ValueCommandInput.cast(None)
+_numRows = adsk.core.ValueCommandInput.cast(None)
+_webbing  = adsk.core.ValueCommandInput.cast(None)
 _errMessage = adsk.core.TextBoxCommandInput.cast(None)
-
-
-
 _module = adsk.core.ValueCommandInput.cast(None)
-_imgInputEnglish = adsk.core.ImageCommandInput.cast(None)
-_imgInputMetric = adsk.core.ImageCommandInput.cast(None)
 _handlers = []
 
 def run(context):
@@ -33,7 +43,7 @@ def run(context):
         cmdDef = _ui.commandDefinitions.itemById('adskNoSupportsPythonScript')
         if not cmdDef:
             # Create a command definition.
-            cmdDef = _ui.commandDefinitions.addButtonDefinition('adskNoSupportsPythonScript', 'No supports', 'Creates self supporting structure', 'resources/NoSupports') 
+            cmdDef = _ui.commandDefinitions.addButtonDefinition('adskNoSupportsPythonScript', 'NoSupports.com Ascending Chevrons', 'Creates self supporting structure', 'resources/NoSupports') 
         
         # Connect to the command created event.
         onCommandCreated = MeshCommandCreatedHandler()
@@ -111,43 +121,56 @@ class MeshCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             global _units
             _units = 'mm'
             
-            margin = '10'
+            sketchName = 'Sketch1'
+            sketchNameAttrib = des.attributes.itemByName(_uiName, 'sketchName')
+            if sketchNameAttrib:
+                sketchName = sketchNameAttrib.value
+
+            margin = 'margin'
             marginAttrib = des.attributes.itemByName(_uiName, 'margin')
             if marginAttrib:
                 margin = marginAttrib.value
 
-            width = '200'
+            width = 'w1'
             widthAttrib = des.attributes.itemByName(_uiName, 'width')
             if widthAttrib:
                 width = widthAttrib.value
 
-            height = '100'
+            height = 'h1'
             heightAttrib = des.attributes.itemByName(_uiName, 'height')
             if heightAttrib:
                 height = heightAttrib.value
 
-            hexWidth = '20'
-            hexWidthAttrib = des.attributes.itemByName(_uiName, 'hexWidth')
-            if hexWidthAttrib:
-                hexWidth = hexWidthAttrib.value
+            numCols = '4'
+            numColsAttrib = des.attributes.itemByName(_uiName, 'numCols')
+            if numColsAttrib:
+                numCols = numColsAttrib.value
 
-            hexSpacing = '2'
-            hexSpacingAttrib = des.attributes.itemByName(_uiName, 'hexSpacing')
-            if hexSpacingAttrib:
-                hexSpacing = hexSpacingAttrib.value
+
+            numRows = '4'
+            numRowsAttrib = des.attributes.itemByName(_uiName, 'numRows')
+            if numRowsAttrib:
+                numRows = numRowsAttrib.value
+
+            webbing = '2'
+            webbingAttrib = des.attributes.itemByName(_uiName, 'webbing')
+            if webbingAttrib:
+                webbing = webbingAttrib.value
 
             cmd = eventArgs.command
             cmd.isExecutedWhenPreEmpted = False
             inputs = cmd.commandInputs
             
-            global _margin, _width, _height, _hexWidth, _hexSpacing, _module, _errMessage
+            global _marginParam, _sketchName, _widthParam, _heightParam, _numCols, _numRows, _webbing, _module, _errMessage
 
             # Define the command dialog.         
-            _margin = inputs.addStringValueInput('margin', 'Margin', margin)   
-            _width = inputs.addStringValueInput('width', 'Width', width)   
-            _height = inputs.addStringValueInput('height', 'Height', height)   
-            _hexWidth = inputs.addStringValueInput('hexWidth', 'Hex Width', hexWidth)   
-            _hexSpacing = inputs.addStringValueInput('hexSpacing', 'hexSpacing', hexSpacing)   
+            _marginParam = inputs.addStringValueInput('margin', 'Margin', margin)   
+            _sketchName = inputs.addStringValueInput('sketchName', 'SketchName', sketchName)   
+            _widthParam = inputs.addStringValueInput('width', 'Width', width)   
+            _heightParam = inputs.addStringValueInput('height', 'Height', height)   
+            _numCols = inputs.addStringValueInput('numCols', 'Num Cols', numCols)   
+            _numRows = inputs.addStringValueInput('numRows', 'Num Rows', numRows)   
+            _webbing = inputs.addStringValueInput('webbing', 'Webbing', webbing)   
 
             
             _errMessage = inputs.addTextBoxCommandInput('errMessage', '', '', 2, True)
@@ -184,6 +207,14 @@ def convertUnits(val):
     else:
         return val
     
+
+def getDesignParam(design,paramName,convert):
+    param = design.allParameters.itemByName(paramName)
+    if convert:
+        return convertUnits(param.value)
+    else:
+        return param.value
+ 
 # Event handler for the execute event.
 class MeshCommandExecuteHandler(adsk.core.CommandEventHandler):
     def __init__(self):
@@ -195,20 +226,31 @@ class MeshCommandExecuteHandler(adsk.core.CommandEventHandler):
             # Save the current values as attributes.
             des = adsk.fusion.Design.cast(_app.activeProduct)
             attribs = des.attributes
-            attribs.add(_uiName, 'margin',  str(_margin.value))
-            attribs.add(_uiName, 'width', str(_width.value))
-            attribs.add(_uiName, 'height', str(_height.value))
-            attribs.add(_uiName, 'hexWidth', str(_hexWidth.value))
-            attribs.add(_uiName, 'hexSpacing', str(_hexSpacing.value))
+            attribs.add(_uiName, 'margin',  str(_marginParam.value))
+            attribs.add(_uiName, 'sketchName',  str(_sketchName.value))
+            attribs.add(_uiName, 'width', str(_widthParam.value))
+            attribs.add(_uiName, 'height', str(_heightParam.value))
+            attribs.add(_uiName, 'numCols', str(_numCols.value))
+            attribs.add(_uiName, 'numRows', str(_numRows.value))
+            attribs.add(_uiName, 'webbing', str(_webbing.value))
 
-            margin = convertUnits(float(_margin.value))
-            width = convertUnits(float(_width.value))
-            height = convertUnits(float(_height.value))
-            hexWidth = convertUnits(float(_hexWidth.value))
-            hexSpacing = convertUnits(float(_hexSpacing.value))
+            width = getDesignParam(des,str(_widthParam.value),False)
+            height = getDesignParam(des,str(_heightParam.value),False)
+            margin = getDesignParam(des,str(_marginParam.value),False)
+            numCols = float(_numCols.value)
+            numRows = float(_numRows.value)
+            webbing = convertUnits(float(_webbing.value))
+            sketchName = str(_sketchName.value)
+
+
+            log = UiLogger(True)
+
+            log.print("Width " + str(width))
+            log.print("Height " + str(height))
+            log.print("Margin " + str(margin))
 
             # Create the mesh.
-            meshComp = drawMesh(des, width, height, hexWidth, hexSpacing, margin)
+            meshComp = drawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
         except:
             if _ui:
                 _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
@@ -225,16 +267,16 @@ class MeshCommandInputChangedHandler(adsk.core.InputChangedEventHandler):
             global _units
             _units = 'mm'
 
-            _margin.value = _margin.value
-            _margin.unitType = _units
-            _width.value = _width.value
-            _width.unitType = _units
-            _height.value = _height.value
-            _height.unitType = _units
-            _hexWidth.value = _hexWidth.value
-            _hexWidth.unitType = _units
-            _hexSpacing.value = _hexSpacing.value
-            _hexSpacing.unitType = _units
+            _marginParam.value = _marginParam.value
+            _sketchName.value = _sketchName.value
+            _widthParam.value = _widthParam.value
+            _widthParam.unitType = _units
+            _heightParam.value = _heightParam.value
+            _heightParam.unitType = _units
+            _numCols.value = _numCols.value
+            _numRows.value = _numRows.value
+            _webbing.value = _webbing.value
+            _webbing.unitType = _units
                                   
         except:
             if _ui:
@@ -396,20 +438,20 @@ def drawMidpointConstraint(sketch,outerLine, innerLine,isVertical):
     sketch.geometricConstraints.addMidPoint(newline.startSketchPoint,outerLine)
     sketch.geometricConstraints.addMidPoint(newline.endSketchPoint,innerLine)
 
-def drawHex(sketch, hexWidth,startX,startY):
+def drawHex(sketch, numCols,startX,startY):
     
-    apexHeight = hexWidth/2.0
+    apexHeight = numCols/2.0
 
-    # overall height of hex is hexWidth*2
-    # 1/2 hexWidth for bottom triangle
-    # 1/2 hexWidth for top triangle
-    # 1 hexWidth for middle square
+    # overall height of hex is numCols*2
+    # 1/2 numCols for bottom triangle
+    # 1/2 numCols for top triangle
+    # 1 numCols for middle square
     
-    halfHex = hexWidth/2.0
+    halfHex = numCols/2.0
     #  y coords
     y0 = startY
     y1 = y0 + halfHex
-    y2 = y1 + hexWidth
+    y2 = y1 + numCols
     y3 = y2 + halfHex
     
     # compute x coords
@@ -491,11 +533,114 @@ def drawHex(sketch, hexWidth,startX,startY):
     # constrain box height by constraining first vertical
     sketch.sketchDimensions.addDistanceDimension(l1.startSketchPoint, l1.endSketchPoint,
                                                  adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
-                                                 adsk.core.Point3D.create(0, hexWidth, 0))
+                                                 adsk.core.Point3D.create(0, numCols, 0))
     # constrain box width by constraining c0
     sketch.sketchDimensions.addDistanceDimension(c0.startSketchPoint, c0.endSketchPoint,
                                                  adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
-                                                 adsk.core.Point3D.create(hexWidth, 0, 0))
+                                                 adsk.core.Point3D.create(numCols, 0, 0))
+
+
+def drawChevron(sketch, chevronWidth,webbing,startX,startY):
+    
+    apexHeight = chevronWidth/2.0
+    halfWidth = chevronWidth/2.0
+    # overall webbing + half width
+    # 1/2 numCols for bottom triangle
+    # 1/2 numCols for top triangle
+    # 1 numCols for middle square
+    #  y coords
+
+    y0 = startY
+    y1 = y0 + webbing
+    y2 = y1 + apexHeight
+    y3 = y2 - webbing
+
+    # compute x coords
+    x0 = startX
+    x1 = x0 + halfWidth
+    x2 = startX+chevronWidth
+
+    # compute points: start at bottom apex, work clockwise around perimeter
+    p0 = adsk.core.Point3D.create(x0,y0,0.0)
+    p1 = adsk.core.Point3D.create(x0,y1,0.0)
+    p2 = adsk.core.Point3D.create(x1,y2,0.0)
+    p3 = adsk.core.Point3D.create(x2,y1,0.0)
+    p4 = adsk.core.Point3D.create(x2,y0,0.0)
+    p5 = adsk.core.Point3D.create(x1,y3,0.0)
+
+    # add lines, going clockwise around perimeter
+    # left side vertical
+    l0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p1)
+    sketch.geometricConstraints.addVertical(l0)
+
+    # upper left slope and upper right slope
+    l1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p1,p2)
+    l2 = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p3)
+    # force apex to be square
+    sketch.geometricConstraints.addPerpendicular(l1,l2)
+
+    # right side vertical
+    l3 = sketch.sketchCurves.sketchLines.addByTwoPoints(p3,p4)
+    sketch.geometricConstraints.addVertical(l3)
+
+
+    # bottom slopes
+    l4 = sketch.sketchCurves.sketchLines.addByTwoPoints(p4,p5)
+    l5 = sketch.sketchCurves.sketchLines.addByTwoPoints(p5,p0)
+    # force apex to be square
+    sketch.geometricConstraints.addPerpendicular(l4,l5)
+
+
+    # force all points to be connected
+    sketch.geometricConstraints.addCoincident(l0.endSketchPoint,l1.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l1.endSketchPoint,l2.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l2.endSketchPoint,l3.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l3.endSketchPoint,l4.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l4.endSketchPoint,l5.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(l5.endSketchPoint,l0.startSketchPoint)
+
+   
+    # Add construction line across top of chevron
+    c0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p1,p3)
+    c0.isConstruction = True
+    sketch.geometricConstraints.addHorizontal(c0)
+    sketch.geometricConstraints.addCoincident(c0.startSketchPoint,l0.endSketchPoint)
+    sketch.geometricConstraints.addCoincident(c0.endSketchPoint,l3.startSketchPoint)
+
+    # Add construction line across bottom of chevron
+    c1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p4)
+    c1.isConstruction = True
+    sketch.geometricConstraints.addHorizontal(c1)
+    sketch.geometricConstraints.addCoincident(c1.startSketchPoint,l0.startSketchPoint)
+    sketch.geometricConstraints.addCoincident(c1.endSketchPoint,l3.endSketchPoint)
+
+    # Add construction line from top apex to bottom apex
+    c0MidLine = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p5)
+    c0MidLine.isConstruction = True
+    sketch.geometricConstraints.addCoincident(c0MidLine.startSketchPoint,l1.endSketchPoint)
+    sketch.geometricConstraints.addCoincident(c0MidLine.endSketchPoint,l4.endSketchPoint)
+    sketch.geometricConstraints.addVertical(c0MidLine)
+
+    # Add construction line from bottom apex to c1 mid
+    c1Mid = lineMidpoint(c1)
+    c1MidLine = sketch.sketchCurves.sketchLines.addByTwoPoints(c1Mid,p5)
+    c1MidLine.isConstruction = True
+    sketch.geometricConstraints.addCoincident(c1MidLine.endSketchPoint,l4.endSketchPoint)
+    sketch.geometricConstraints.addMidPoint(c1MidLine.startSketchPoint,c1)
+    sketch.geometricConstraints.addVertical(c1MidLine)
+
+    # TODO    Constrain length of l0 to be webbing (l3 will be driven)
+    # TODO  Vertical constraint from apex to mid of c1
+
+    # constrain chevron height by constraining webbing length (l0)
+    sketch.sketchDimensions.addDistanceDimension(l0.startSketchPoint, l0.endSketchPoint,
+                                                 adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
+                                                 adsk.core.Point3D.create(0, webbing, 0))
+
+    # constrain chevron width by constraining c0
+    sketch.sketchDimensions.addDistanceDimension(c0.startSketchPoint, c0.endSketchPoint,
+                                                 adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
+                                                 adsk.core.Point3D.create(chevronWidth, 0, 0))
 
 
 def drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin):
@@ -516,59 +661,130 @@ def drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin):
     innerRectLeft = sketch.sketchCurves.sketchLines.item(startItem+7)
     drawMidpointConstraint(sketch,outerRectLeft,innerRectLeft,False)
 
-def drawMesh(design, width, height, hexWidth, hexSpacing, margin):
-    try:
-        # Create a new sketch.
-        thisComp = design.rootComponent
-        sketches = thisComp.sketches
+def findSketch(sketches,sketchName):
 
+    skt: fusion.Sketch = None
 
-        skt: fusion.Sketch = None
-        skt = sketches.item(0)
-        if skt.classType() == fusion.Sketch.classType():
-            masterSketch = skt
-        else:
-            masterSketch = skt.parentSketch
+    log = UiLogger(True)
 
-        try:
-            sketch = create_clone_sketch(masterSketch)
-        except Exception as error:
-            sketch.name = "Error"
+    log.print("Found sketch " + sketchName)
 
-        bbox = masterSketch.boundingBox
-        blc = bbox.minPoint
-        trc = bbox.maxPoint
-        
+    skt = sketches.itemByName(sketchName)
 
-        # Get the size from the UI
-        outerX1 = 0.0
-        outerY1 = 0.0
-        outerX2 = width
-        outerY2 = height
+    if skt.classType() == fusion.Sketch.classType():
+        result = skt
+    else:
+        result = skt.parentSketch
 
-        # Get the size from the componenet
-        #outerX1 = blc.x
-        #outerY1 = blc.y
-        #outerX2 = trc.x
-        #outerY2 = trc.y
+    return result
 
-        # Get the size from the componenet v2
-        #outerX1 = 0
-        #outerY1 = 0
-        #outerX2 = trc.x-blc.x
-        #outerY2 = trc.y-blc.y
+def drawStrut(sketch,height,webbing,startX,startY):
+    # compute y coords
+    yAdj = webbing/2.0
+    y0 = startY
+    y1 = y0 + height
 
+    # compute x coords
+    x0 = startX - webbing/2.0
+    x1 = x0 + webbing
 
-        drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin)
+    # compute points: start at bottom apex, work clockwise around perimeter
+    p0 = adsk.core.Point3D.create(x0,y0,0.0)
+    p1 = adsk.core.Point3D.create(x0,y1,0.0)
+    p2 = adsk.core.Point3D.create(x1,y0,0.0)
+    p3 = adsk.core.Point3D.create(x1,y1,0.0)
 
-        #numRows = computeRows(blc,trc,hexWidth)
-        # numCols = computeCols(blc,trc,hexWidth)
+    l0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p1)
+    sketch.geometricConstraints.addVertical(l0)
 
-        # drawHex(sketch,hexWidth,margin+1.0,margin+1.0)
+    l1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p3)
+    sketch.geometricConstraints.addVertical(l1)
 
-        sketch.name = 'NoSupports Test'
-        return sketch
+    # TODO: Constrain to existing line
+    #sketch.geometricConstraints.addCoincident(c0MidLine.startSketchPoint,l1.endSketchPoint)
+    #sketch.geometricConstraints.addCoincident(c0MidLine.endSketchPoint,l4.endSketchPoint)
     
-    except Exception as error:
-        _ui.messageBox("drawMesh Failed : " + str(error)) 
-        return None
+    return
+
+def drawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
+    # TODO: Pass the cloned sketch in, fail with gracful error if sketch not found
+
+    # Create a new sketch.
+    thisComp = design.rootComponent
+    masterSketch: fusion.Sketch = findSketch(thisComp.sketches,sketchName)
+    sketch = create_clone_sketch(masterSketch)
+
+    bbox = masterSketch.boundingBox
+    blc = bbox.minPoint
+    trc = bbox.maxPoint
+
+    # Get the size from the UI
+    outerX1 = 0.0
+    outerY1 = 0.0
+    outerX2 = width
+    outerY2 = height
+
+    # Get the size from the componenet
+    #outerX1 = blc.x
+    #outerY1 = blc.y
+    #outerX2 = trc.x
+    #outerY2 = trc.y
+
+    # Get the size from the component v2
+    #outerX1 = 0
+    #outerY1 = 0
+    #outerX2 = trc.x-blc.x
+    #outerY2 = trc.y-blc.y
+
+    drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin)
+
+    xOffset = margin
+    yOffset = margin
+
+    overallWidth = width-margin*2.0
+    overallHeight= height-margin*2.0
+
+    chevronWidth = (overallWidth/numCols)
+    
+    numCols = int(numCols)
+    numRows = int (numRows)
+
+    log = UiLogger(True)
+
+    xStep = chevronWidth
+    yStep = overallHeight/float(numRows)
+
+    # TODO: broken when numRows = 1
+    if numRows == 1:
+        print("Uh oh, broken code!")
+    yStep = (overallHeight-(chevronWidth/2)-webbing)/(numRows-1)
+
+   
+    log.print("overallHeight " + str(overallHeight))
+    log.print("chevronWidth " + str(chevronWidth))
+    log.print("NumRows " + str(numRows))
+
+    for y in range (0,numRows):
+        for x in range (0,numCols):
+            drawChevron(sketch,chevronWidth,webbing,xOffset,yOffset)
+            xOffset += xStep
+        xOffset = margin
+        yOffset += yStep
+
+    # Draw struts at right sides of chevrons, except for last chevron
+    xOffset = margin
+    yOffset = margin
+
+    strutHeight = yStep*(numRows-1) + webbing/2
+
+    # TODO: Handle case with no struts!
+    for x in range (1,numCols):
+        drawStrut(sketch,strutHeight,webbing,xOffset+xStep,yOffset)
+        xOffset += xStep
+
+    sketch.name = 'NoSupports Test'
+    return sketch
+    
+    #except Exception as error:
+    #    _ui.messageBox("drawAscendingChevrons Failed : " + str(error)) 
+    #    return None

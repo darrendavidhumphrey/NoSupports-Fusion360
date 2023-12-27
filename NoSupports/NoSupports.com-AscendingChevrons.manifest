@@ -1,7 +1,7 @@
 {
 	"autodeskProduct":	"Fusion360",
 	"type":	"script",
-	"author":	"",
+	"author":	"Darren Humphrey",
 	"description":	{
 		"":	"Creates a grid of self-supporting objects"
 	},
