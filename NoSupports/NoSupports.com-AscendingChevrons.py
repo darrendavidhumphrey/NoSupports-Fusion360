@@ -2,9 +2,10 @@ import adsk.core, adsk.fusion, adsk.cam, traceback
 import math
 
 import os, sys
-sys.path.append("C:/Users/darre/Documents/Fusion 360/scripts/NoSupports/packages/svg.py")
+sys.path.append("C:/Python311/Lib/site-packages")
 
 import svg
+import ezdxf
 
 # Globals
 _app = adsk.core.Application.cast(None)
@@ -257,8 +258,8 @@ class MeshCommandExecuteHandler(adsk.core.CommandEventHandler):
             log.print("Margin " + str(margin))
 
             # Create the mesh.
-            #meshComp = drawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
-            svgDrawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
+            # svgDrawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
+            dxfDrawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
         except:
             if _ui:
                 _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
@@ -593,6 +594,35 @@ def svgDrawChevron(sketch, chevronWidth,webbing,startX,startY,height):
                 stroke_width=1,
             )
 
+def dxfDrawChevron(msp, chevronWidth,webbing,startX,startY,height):
+    apexHeight = chevronWidth/2.0
+    halfWidth = chevronWidth/2.0
+    # overall webbing + half width
+    # 1/2 numCols for bottom triangle
+    # 1/2 numCols for top triangle
+    # 1 numCols for middle square
+    #  y coords
+
+    y0 = startY
+    y1 = y0 + webbing
+    y2 = y1 + apexHeight
+    y3 = y2 - webbing
+
+    y0 = flipY(y0,height)
+    y1 = flipY(y1,height)
+    y2 = flipY(y2,height)
+    y3 = flipY(y3,height)
+
+    # compute x coords
+    x0 = startX
+    x1 = x0 + halfWidth
+    x2 = startX+chevronWidth
+
+    points = [ (x0, y0), (x0, y1), (x1, y2),(x2, y1), (x2, y0),(x1, y3),(x0, y0) ]
+                
+    msp.add_lwpolyline(points)
+
+
 def findSketch(sketches,sketchName):
 
     skt: fusion.Sketch = None
@@ -609,8 +639,6 @@ def findSketch(sketches,sketchName):
         result = skt.parentSketch
 
     return result
-
-
 
 
 def svgDrawStrut(sketch,strutHeight,webbing,startX,startY,height):
@@ -642,6 +670,26 @@ def svgDrawStrut(sketch,strutHeight,webbing,startX,startY,height):
     ]
 
     return elements
+
+def dxfDrawStrut(msp,strutHeight,webbing,startX,startY,height):
+    # compute y coords
+    yAdj = webbing/2.0
+    y0 = startY
+    y1 = y0 + strutHeight
+
+    y0 = flipY(y0,height)
+    y1 = flipY(y1,height)
+
+    # compute x coords
+    x0 = startX - webbing/2.0
+    x1 = x0 + webbing
+
+    l1points = [(x0,y0),(x0,y1)]
+    msp.add_lwpolyline(l1points)
+
+    l2points = [(x1,y0),(x1,y1)]
+    msp.add_lwpolyline(l2points)
+
 
 def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
     # TODO: Pass the cloned sketch in, fail with gracful error if sketch not found
@@ -695,10 +743,6 @@ def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, m
         log.print("Uh oh, broken code!")
     yStep = (overallHeight-(chevronWidth/2)-webbing)/(numRows-1)
 
-    #log.print("dbg overallHeight " + str(overallHeight))
-    #log.print("dbg chevronWidth " + str(chevronWidth))
-    #log.print("dbg NumRows " + str(numRows))
-
     xOffset = margin
     for y in range (0,numRows):
         for x in range (0,numCols):
@@ -721,7 +765,6 @@ def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, m
         elements.append(struts) 
         xOffset += xStep
 
-    elements.append(svg.Rect(x=-2,y=-2,width=2,height=2))
     canvas = svg.SVG(
         x=outerX1,
         y=outerY1,
@@ -734,6 +777,7 @@ def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, m
 
     #log.print(str(canvas))
 
+
     file = open("c:/foo.svg","w")
     with open("c:/foo.svg", 'w') as file:
         file.write(str(canvas))
@@ -742,3 +786,96 @@ def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, m
 
     sketch.name = 'NoSupports Test'
     return sketch
+
+
+
+def dxfDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
+    # TODO: Pass the cloned sketch in, fail with gracful error if sketch not found
+
+    # Create a new sketch.
+    thisComp = design.rootComponent
+    masterSketch: fusion.Sketch = findSketch(thisComp.sketches,sketchName)
+    sketch = create_clone_sketch(masterSketch)
+
+    log = UiLogger(True)
+
+    # Get the size from the UI
+    outerX1 = 0.0
+    outerY1 = 0.0
+    outerX2 = width
+    outerY2 = height
+
+    doc = ezdxf.new("R2000")
+    msp = doc.modelspace()
+
+    points = [(0, 0), (3, 0), (6, 3), (6, 6)]
+
+    r1x1 = 0
+    r1y1 = flipY(0,height)
+    r1x2 = outerX2
+    r1y2 = flipY(outerY2,height)
+    msp.add_lwpolyline([(r1x1,r1y1),(r1x2,r1y1),(r1x2,r1y2),(r1x1,r1y2),(r1x1,r1y1)])
+
+
+    r2x1 = margin
+    r2y1 = flipY(margin,height)
+    r2x2 = outerX2-margin
+    r2y2 = flipY(outerY2-margin,height)
+
+    msp.add_lwpolyline([(r2x1,r2y1),(r2x2,r2y1),(r2x2,r2y2),(r2x1,r2y2),(r2x1,r2y1)])
+
+    xOffset = margin
+    yOffset = margin
+
+    overallWidth = width-margin*2.0
+    overallHeight= height-margin*2.0
+
+    chevronWidth = (overallWidth/numCols)
+    
+    numCols = int(numCols)
+    numRows = int (numRows)
+
+    xStep = chevronWidth
+    yStep = overallHeight/float(numRows)
+
+    # TODO: broken when numRows = 1
+    if numRows == 1:
+        log.print("Uh oh, broken code!")
+    yStep = (overallHeight-(chevronWidth/2)-webbing)/(numRows-1)
+
+    xOffset = margin
+    for y in range (0,numRows):
+        for x in range (0,numCols):
+            dxfDrawChevron(msp,chevronWidth,webbing,xOffset,yOffset,height)
+            xOffset += xStep
+        xOffset = margin
+        yOffset += yStep
+
+    # Draw struts at right sides of chevrons, except for last chevron
+    xOffset = margin
+    yOffset = margin
+
+    strutHeight = yStep*(numRows-1) + webbing/2
+
+    # TODO: Handle case with no struts!
+    for x in range (1,numCols):
+        dxfDrawStrut(msp,strutHeight,webbing,(xOffset+xStep),yOffset,height)
+        xOffset += xStep
+
+
+    doc.saveas("c:/foo.dxf")
+
+
+    importManager = adsk.core.Application.get().importManager
+    dxfOptions = importManager.createDXF2DImportOptions("C:/foo.dxf", thisComp.xZConstructionPlane)
+
+    dxfOptions.isViewFit = False 
+    dxfOptions.isSingleSketchResult = True
+            
+    # Import dxf file to root component
+    importManager.importToTarget(dxfOptions, thisComp)
+
+    sketch.name = 'NoSupports Test'
+    return sketch
+
+
