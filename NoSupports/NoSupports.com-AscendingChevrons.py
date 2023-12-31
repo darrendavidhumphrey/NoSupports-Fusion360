@@ -1,6 +1,11 @@
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import math
 
+import os, sys
+sys.path.append("C:/Users/darre/Documents/Fusion 360/scripts/NoSupports/packages/svg.py")
+
+import svg
+
 # Globals
 _app = adsk.core.Application.cast(None)
 _ui = adsk.core.UserInterface.cast(None)
@@ -252,7 +257,8 @@ class MeshCommandExecuteHandler(adsk.core.CommandEventHandler):
             log.print("Margin " + str(margin))
 
             # Create the mesh.
-            meshComp = drawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
+            #meshComp = drawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
+            svgDrawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
         except:
             if _ui:
                 _ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
@@ -542,8 +548,12 @@ def drawHex(sketch, numCols,startX,startY):
                                                  adsk.core.Point3D.create(numCols, 0, 0))
 
 
-def drawChevron(sketch, chevronWidth,webbing,startX,startY):
-    
+# TODO: Add a flip axis flag to script and try to deduce it automatically
+
+def flipY(y,height):
+    return y #height-y - height
+
+def svgDrawChevron(sketch, chevronWidth,webbing,startX,startY,height):
     apexHeight = chevronWidth/2.0
     halfWidth = chevronWidth/2.0
     # overall webbing + half width
@@ -557,111 +567,31 @@ def drawChevron(sketch, chevronWidth,webbing,startX,startY):
     y2 = y1 + apexHeight
     y3 = y2 - webbing
 
+    y0 = flipY(y0,height)
+    y1 = flipY(y1,height)
+    y2 = flipY(y2,height)
+    y3 = flipY(y3,height)
+
+
     # compute x coords
     x0 = startX
     x1 = x0 + halfWidth
     x2 = startX+chevronWidth
 
-    # compute points: start at bottom apex, work clockwise around perimeter
-    p0 = adsk.core.Point3D.create(x0,y0,0.0)
-    p1 = adsk.core.Point3D.create(x0,y1,0.0)
-    p2 = adsk.core.Point3D.create(x1,y2,0.0)
-    p3 = adsk.core.Point3D.create(x2,y1,0.0)
-    p4 = adsk.core.Point3D.create(x2,y0,0.0)
-    p5 = adsk.core.Point3D.create(x1,y3,0.0)
-
-    # add lines, going clockwise around perimeter
-    # left side vertical
-    l0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p1)
-    sketch.geometricConstraints.addVertical(l0)
-
-    # upper left slope and upper right slope
-    l1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p1,p2)
-    l2 = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p3)
-    # force apex to be square
-    sketch.geometricConstraints.addPerpendicular(l1,l2)
-
-    # right side vertical
-    l3 = sketch.sketchCurves.sketchLines.addByTwoPoints(p3,p4)
-    sketch.geometricConstraints.addVertical(l3)
-
-
-    # bottom slopes
-    l4 = sketch.sketchCurves.sketchLines.addByTwoPoints(p4,p5)
-    l5 = sketch.sketchCurves.sketchLines.addByTwoPoints(p5,p0)
-    # force apex to be square
-    sketch.geometricConstraints.addPerpendicular(l4,l5)
-
-
-    # force all points to be connected
-    sketch.geometricConstraints.addCoincident(l0.endSketchPoint,l1.startSketchPoint)
-    sketch.geometricConstraints.addCoincident(l1.endSketchPoint,l2.startSketchPoint)
-    sketch.geometricConstraints.addCoincident(l2.endSketchPoint,l3.startSketchPoint)
-    sketch.geometricConstraints.addCoincident(l3.endSketchPoint,l4.startSketchPoint)
-    sketch.geometricConstraints.addCoincident(l4.endSketchPoint,l5.startSketchPoint)
-    sketch.geometricConstraints.addCoincident(l5.endSketchPoint,l0.startSketchPoint)
-
-   
-    # Add construction line across top of chevron
-    c0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p1,p3)
-    c0.isConstruction = True
-    sketch.geometricConstraints.addHorizontal(c0)
-    sketch.geometricConstraints.addCoincident(c0.startSketchPoint,l0.endSketchPoint)
-    sketch.geometricConstraints.addCoincident(c0.endSketchPoint,l3.startSketchPoint)
-
-    # Add construction line across bottom of chevron
-    c1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p4)
-    c1.isConstruction = True
-    sketch.geometricConstraints.addHorizontal(c1)
-    sketch.geometricConstraints.addCoincident(c1.startSketchPoint,l0.startSketchPoint)
-    sketch.geometricConstraints.addCoincident(c1.endSketchPoint,l3.endSketchPoint)
-
-    # Add construction line from top apex to bottom apex
-    c0MidLine = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p5)
-    c0MidLine.isConstruction = True
-    sketch.geometricConstraints.addCoincident(c0MidLine.startSketchPoint,l1.endSketchPoint)
-    sketch.geometricConstraints.addCoincident(c0MidLine.endSketchPoint,l4.endSketchPoint)
-    sketch.geometricConstraints.addVertical(c0MidLine)
-
-    # Add construction line from bottom apex to c1 mid
-    c1Mid = lineMidpoint(c1)
-    c1MidLine = sketch.sketchCurves.sketchLines.addByTwoPoints(c1Mid,p5)
-    c1MidLine.isConstruction = True
-    sketch.geometricConstraints.addCoincident(c1MidLine.endSketchPoint,l4.endSketchPoint)
-    sketch.geometricConstraints.addMidPoint(c1MidLine.startSketchPoint,c1)
-    sketch.geometricConstraints.addVertical(c1MidLine)
-
-    # TODO    Constrain length of l0 to be webbing (l3 will be driven)
-    # TODO  Vertical constraint from apex to mid of c1
-
-    # constrain chevron height by constraining webbing length (l0)
-    sketch.sketchDimensions.addDistanceDimension(l0.startSketchPoint, l0.endSketchPoint,
-                                                 adsk.fusion.DimensionOrientations.VerticalDimensionOrientation,
-                                                 adsk.core.Point3D.create(0, webbing, 0))
-
-    # constrain chevron width by constraining c0
-    sketch.sketchDimensions.addDistanceDimension(c0.startSketchPoint, c0.endSketchPoint,
-                                                 adsk.fusion.DimensionOrientations.HorizontalDimensionOrientation,
-                                                 adsk.core.Point3D.create(chevronWidth, 0, 0))
-
-
-def drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin):
-    
-    startItem = sketch.sketchCurves.sketchLines.count
-    drawBox(sketch,outerX1,outerY1,outerX2,outerY2)
-    innerX1 = outerX1 + margin
-    innerY1 = outerY1 + margin
-    innerX2 = outerX2 - margin*2.0
-    innerY2 = outerY2 - margin*2.0
-    drawBox(sketch,innerX1,innerY1,innerX2,innerY2)
-        
-    outerRectBottom = sketch.sketchCurves.sketchLines.item(startItem)
-    innerRectBottom = sketch.sketchCurves.sketchLines.item(startItem+4)
-    drawMidpointConstraint(sketch,outerRectBottom,innerRectBottom,True)
-
-    outerRectLeft = sketch.sketchCurves.sketchLines.item(startItem+3)
-    innerRectLeft = sketch.sketchCurves.sketchLines.item(startItem+7)
-    drawMidpointConstraint(sketch,outerRectLeft,innerRectLeft,False)
+    return svg.Polyline(
+                points=[
+                    x0, y0, 
+                    x0, y1,
+                    x1, y2,
+                    x2, y1,
+                    x2, y0,
+                    x1, y3,
+                    x0, y0
+                ],
+                stroke="orange",
+                fill="transparent",
+                stroke_width=1,
+            )
 
 def findSketch(sketches,sketchName):
 
@@ -680,35 +610,40 @@ def findSketch(sketches,sketchName):
 
     return result
 
-def drawStrut(sketch,height,webbing,startX,startY):
+
+
+
+def svgDrawStrut(sketch,strutHeight,webbing,startX,startY,height):
     # compute y coords
     yAdj = webbing/2.0
-    y0 = startY
-    y1 = y0 + height
+    Y0 = startY
+    Y1 = Y0 + strutHeight
+
+    Y0 = flipY(Y0,height)
+    Y1 = flipY(Y1,height)
 
     # compute x coords
-    x0 = startX - webbing/2.0
-    x1 = x0 + webbing
+    X0 = startX - webbing/2.0
+    X1 = X0 + webbing
 
-    # compute points: start at bottom apex, work clockwise around perimeter
-    p0 = adsk.core.Point3D.create(x0,y0,0.0)
-    p1 = adsk.core.Point3D.create(x0,y1,0.0)
-    p2 = adsk.core.Point3D.create(x1,y0,0.0)
-    p3 = adsk.core.Point3D.create(x1,y1,0.0)
+    elements=[
+        svg.Line(
+            x1=X0, y1=Y0,
+            x2=X0, y2=Y1,
+            stroke="red",
+            stroke_width=1,
+        ),
+        svg.Line(
+            x1=X1, y1=Y0,
+            x2=X1, y2=Y1,
+            stroke="red",
+            stroke_width=1,
+        )
+    ]
 
-    l0 = sketch.sketchCurves.sketchLines.addByTwoPoints(p0,p1)
-    sketch.geometricConstraints.addVertical(l0)
+    return elements
 
-    l1 = sketch.sketchCurves.sketchLines.addByTwoPoints(p2,p3)
-    sketch.geometricConstraints.addVertical(l1)
-
-    # TODO: Constrain to existing line
-    #sketch.geometricConstraints.addCoincident(c0MidLine.startSketchPoint,l1.endSketchPoint)
-    #sketch.geometricConstraints.addCoincident(c0MidLine.endSketchPoint,l4.endSketchPoint)
-    
-    return
-
-def drawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
+def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
     # TODO: Pass the cloned sketch in, fail with gracful error if sketch not found
 
     # Create a new sketch.
@@ -716,9 +651,7 @@ def drawAscendingChevrons(design, width, height, numCols, numRows, webbing, marg
     masterSketch: fusion.Sketch = findSketch(thisComp.sketches,sketchName)
     sketch = create_clone_sketch(masterSketch)
 
-    bbox = masterSketch.boundingBox
-    blc = bbox.minPoint
-    trc = bbox.maxPoint
+    log = UiLogger(True)
 
     # Get the size from the UI
     outerX1 = 0.0
@@ -726,19 +659,22 @@ def drawAscendingChevrons(design, width, height, numCols, numRows, webbing, marg
     outerX2 = width
     outerY2 = height
 
-    # Get the size from the componenet
-    #outerX1 = blc.x
-    #outerY1 = blc.y
-    #outerX2 = trc.x
-    #outerY2 = trc.y
-
-    # Get the size from the component v2
-    #outerX1 = 0
-    #outerY1 = 0
-    #outerX2 = trc.x-blc.x
-    #outerY2 = trc.y-blc.y
-
-    drawConstrainedFrame(sketch,outerX1,outerY1,outerX2,outerY2,margin)
+    # TODO: Switch to a polyline for consistency with chevrons and flipY
+    elements = [
+        svg.Rect(
+                x=0, y=flipY(0,height),
+                width=outerX2, height=outerY2,
+                stroke="black",
+                fill="transparent",
+                stroke_width=1,
+            ),
+            svg.Rect(
+                x=margin, y=flipY(margin,height),
+                width=width-margin*2, height=(height-margin*2),
+                stroke="black",
+                fill="transparent",
+                stroke_width=1,
+            )]
 
     xOffset = margin
     yOffset = margin
@@ -751,24 +687,24 @@ def drawAscendingChevrons(design, width, height, numCols, numRows, webbing, marg
     numCols = int(numCols)
     numRows = int (numRows)
 
-    log = UiLogger(True)
-
     xStep = chevronWidth
     yStep = overallHeight/float(numRows)
 
     # TODO: broken when numRows = 1
     if numRows == 1:
-        print("Uh oh, broken code!")
+        log.print("Uh oh, broken code!")
     yStep = (overallHeight-(chevronWidth/2)-webbing)/(numRows-1)
 
-   
-    log.print("overallHeight " + str(overallHeight))
-    log.print("chevronWidth " + str(chevronWidth))
-    log.print("NumRows " + str(numRows))
+    #log.print("dbg overallHeight " + str(overallHeight))
+    #log.print("dbg chevronWidth " + str(chevronWidth))
+    #log.print("dbg NumRows " + str(numRows))
 
+    xOffset = margin
     for y in range (0,numRows):
         for x in range (0,numCols):
-            drawChevron(sketch,chevronWidth,webbing,xOffset,yOffset)
+            chevron = svgDrawChevron(sketch,chevronWidth,webbing,xOffset,yOffset,height)
+            elements.append(chevron)
+
             xOffset += xStep
         xOffset = margin
         yOffset += yStep
@@ -781,12 +717,28 @@ def drawAscendingChevrons(design, width, height, numCols, numRows, webbing, marg
 
     # TODO: Handle case with no struts!
     for x in range (1,numCols):
-        drawStrut(sketch,strutHeight,webbing,xOffset+xStep,yOffset)
+        struts = svgDrawStrut(sketch,strutHeight,webbing,(xOffset+xStep),yOffset,height)
+        elements.append(struts) 
         xOffset += xStep
+
+    elements.append(svg.Rect(x=-2,y=-2,width=2,height=2))
+    canvas = svg.SVG(
+        x=outerX1,
+        y=outerY1,
+        width=100,
+        height=100,
+        elements = elements
+    )
+
+    # TODO: convert to DXF https://ezdxf.mozman.at/docs/tutorials/lwpolyline.html
+
+    #log.print(str(canvas))
+
+    file = open("c:/foo.svg","w")
+    with open("c:/foo.svg", 'w') as file:
+        file.write(str(canvas))
+
+    sketch.importSVG("c:/foo.svg", 0.0, -height, 37.79528)
 
     sketch.name = 'NoSupports Test'
     return sketch
-    
-    #except Exception as error:
-    #    _ui.messageBox("drawAscendingChevrons Failed : " + str(error)) 
-    #    return None
