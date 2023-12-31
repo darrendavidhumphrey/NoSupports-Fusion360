@@ -115,8 +115,8 @@ class MeshCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                 _ui.messageBox('A Fusion design must be active when invoking this command.')
                 return()
                 
-            defaultUnits = des.unitsManager.defaultLengthUnits
-                
+            defaultUnits = des.unitsManager.defaultLengthUnits    
+
             # Determine whether to use inches or millimeters as the intial default.
             global _units
             _units = 'mm'
@@ -164,6 +164,8 @@ class MeshCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
             global _marginParam, _sketchName, _widthParam, _heightParam, _numCols, _numRows, _webbing, _module, _errMessage
 
             # Define the command dialog.         
+            _imgInput = inputs.addImageCommandInput('infoImage', '', 'resources/AscendingChevrons.png')
+            _imgInput.isFullWidth = True
             _marginParam = inputs.addStringValueInput('margin', 'Margin', margin)   
             _sketchName = inputs.addStringValueInput('sketchName', 'SketchName', sketchName)   
             _widthParam = inputs.addStringValueInput('width', 'Width', width)   
