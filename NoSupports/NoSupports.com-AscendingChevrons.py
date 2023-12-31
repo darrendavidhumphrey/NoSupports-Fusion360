@@ -4,7 +4,6 @@ import math
 import os, sys
 sys.path.append("C:/Python311/Lib/site-packages")
 
-import svg
 import ezdxf
 
 # Globals
@@ -258,7 +257,6 @@ class MeshCommandExecuteHandler(adsk.core.CommandEventHandler):
             log.print("Margin " + str(margin))
 
             # Create the mesh.
-            # svgDrawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
             dxfDrawAscendingChevrons(des, width, height, numCols, numRows, webbing, margin,sketchName)
         except:
             if _ui:
@@ -552,47 +550,7 @@ def drawHex(sketch, numCols,startX,startY):
 # TODO: Add a flip axis flag to script and try to deduce it automatically
 
 def flipY(y,height):
-    return y #height-y - height
-
-def svgDrawChevron(sketch, chevronWidth,webbing,startX,startY,height):
-    apexHeight = chevronWidth/2.0
-    halfWidth = chevronWidth/2.0
-    # overall webbing + half width
-    # 1/2 numCols for bottom triangle
-    # 1/2 numCols for top triangle
-    # 1 numCols for middle square
-    #  y coords
-
-    y0 = startY
-    y1 = y0 + webbing
-    y2 = y1 + apexHeight
-    y3 = y2 - webbing
-
-    y0 = flipY(y0,height)
-    y1 = flipY(y1,height)
-    y2 = flipY(y2,height)
-    y3 = flipY(y3,height)
-
-
-    # compute x coords
-    x0 = startX
-    x1 = x0 + halfWidth
-    x2 = startX+chevronWidth
-
-    return svg.Polyline(
-                points=[
-                    x0, y0, 
-                    x0, y1,
-                    x1, y2,
-                    x2, y1,
-                    x2, y0,
-                    x1, y3,
-                    x0, y0
-                ],
-                stroke="orange",
-                fill="transparent",
-                stroke_width=1,
-            )
+    return height-y - height
 
 def dxfDrawChevron(msp, chevronWidth,webbing,startX,startY,height):
     apexHeight = chevronWidth/2.0
@@ -640,37 +598,6 @@ def findSketch(sketches,sketchName):
 
     return result
 
-
-def svgDrawStrut(sketch,strutHeight,webbing,startX,startY,height):
-    # compute y coords
-    yAdj = webbing/2.0
-    Y0 = startY
-    Y1 = Y0 + strutHeight
-
-    Y0 = flipY(Y0,height)
-    Y1 = flipY(Y1,height)
-
-    # compute x coords
-    X0 = startX - webbing/2.0
-    X1 = X0 + webbing
-
-    elements=[
-        svg.Line(
-            x1=X0, y1=Y0,
-            x2=X0, y2=Y1,
-            stroke="red",
-            stroke_width=1,
-        ),
-        svg.Line(
-            x1=X1, y1=Y0,
-            x2=X1, y2=Y1,
-            stroke="red",
-            stroke_width=1,
-        )
-    ]
-
-    return elements
-
 def dxfDrawStrut(msp,strutHeight,webbing,startX,startY,height):
     # compute y coords
     yAdj = webbing/2.0
@@ -690,105 +617,6 @@ def dxfDrawStrut(msp,strutHeight,webbing,startX,startY,height):
     l2points = [(x1,y0),(x1,y1)]
     msp.add_lwpolyline(l2points)
 
-
-def svgDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
-    # TODO: Pass the cloned sketch in, fail with gracful error if sketch not found
-
-    # Create a new sketch.
-    thisComp = design.rootComponent
-    masterSketch: fusion.Sketch = findSketch(thisComp.sketches,sketchName)
-    sketch = create_clone_sketch(masterSketch)
-
-    log = UiLogger(True)
-
-    # Get the size from the UI
-    outerX1 = 0.0
-    outerY1 = 0.0
-    outerX2 = width
-    outerY2 = height
-
-    # TODO: Switch to a polyline for consistency with chevrons and flipY
-    elements = [
-        svg.Rect(
-                x=0, y=flipY(0,height),
-                width=outerX2, height=outerY2,
-                stroke="black",
-                fill="transparent",
-                stroke_width=1,
-            ),
-            svg.Rect(
-                x=margin, y=flipY(margin,height),
-                width=width-margin*2, height=(height-margin*2),
-                stroke="black",
-                fill="transparent",
-                stroke_width=1,
-            )]
-
-    xOffset = margin
-    yOffset = margin
-
-    overallWidth = width-margin*2.0
-    overallHeight= height-margin*2.0
-
-    chevronWidth = (overallWidth/numCols)
-    
-    numCols = int(numCols)
-    numRows = int (numRows)
-
-    xStep = chevronWidth
-    yStep = overallHeight/float(numRows)
-
-    # TODO: broken when numRows = 1
-    if numRows == 1:
-        log.print("Uh oh, broken code!")
-    yStep = (overallHeight-(chevronWidth/2)-webbing)/(numRows-1)
-
-    xOffset = margin
-    for y in range (0,numRows):
-        for x in range (0,numCols):
-            chevron = svgDrawChevron(sketch,chevronWidth,webbing,xOffset,yOffset,height)
-            elements.append(chevron)
-
-            xOffset += xStep
-        xOffset = margin
-        yOffset += yStep
-
-    # Draw struts at right sides of chevrons, except for last chevron
-    xOffset = margin
-    yOffset = margin
-
-    strutHeight = yStep*(numRows-1) + webbing/2
-
-    # TODO: Handle case with no struts!
-    for x in range (1,numCols):
-        struts = svgDrawStrut(sketch,strutHeight,webbing,(xOffset+xStep),yOffset,height)
-        elements.append(struts) 
-        xOffset += xStep
-
-    canvas = svg.SVG(
-        x=outerX1,
-        y=outerY1,
-        width=100,
-        height=100,
-        elements = elements
-    )
-
-    # TODO: convert to DXF https://ezdxf.mozman.at/docs/tutorials/lwpolyline.html
-
-    #log.print(str(canvas))
-
-
-    file = open("c:/foo.svg","w")
-    with open("c:/foo.svg", 'w') as file:
-        file.write(str(canvas))
-
-    sketch.importSVG("c:/foo.svg", 0.0, -height, 37.79528)
-
-    sketch.name = 'NoSupports Test'
-    return sketch
-
-
-
 def dxfDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, margin,sketchName):
     # TODO: Pass the cloned sketch in, fail with gracful error if sketch not found
 
@@ -805,8 +633,20 @@ def dxfDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, m
     outerX2 = width
     outerY2 = height
 
+    # Scale test
+    scale = 100.0
+
+    outerX2 = width/scale
+    outerY2 = height/scale
+    height = height/scale
+    width = width/scale
+    margin = margin/scale
+    webbing = webbing/scale
+
     doc = ezdxf.new("R2000")
     msp = doc.modelspace()
+ 
+ 
 
     points = [(0, 0), (3, 0), (6, 3), (6, 6)]
 
@@ -815,7 +655,6 @@ def dxfDrawAscendingChevrons(design, width, height, numCols, numRows, webbing, m
     r1x2 = outerX2
     r1y2 = flipY(outerY2,height)
     msp.add_lwpolyline([(r1x1,r1y1),(r1x2,r1y1),(r1x2,r1y2),(r1x1,r1y2),(r1x1,r1y1)])
-
 
     r2x1 = margin
     r2y1 = flipY(margin,height)
